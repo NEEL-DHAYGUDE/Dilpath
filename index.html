@@ -2,79 +2,110 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Dilpath — Flipbook</title>
+<title>Dilpath | Poetic Shayri</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <style>
 body {
   margin: 0;
-  background: #2b2b2b;
   font-family: Georgia, serif;
-  overflow: hidden;
+  background: #111;
+  color: #fff;
+  overflow-x: hidden;
 }
 
-#book-container {
-  width: 100vw;
-  height: 100vh;
+/* COVER */
+#cover-loader {
+  position: fixed;
+  inset: 0;
+  background: #000;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  z-index: 9999;
+  transition: opacity 1s ease;
+}
+#cover-loader img {
+  max-width: 85%;
+  max-height: 85%;
+}
+#cover-loader.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
+/* BOOK */
 #book {
-  width: 90vw;
-  height: 90vh;
-  background: #ccc;
   display: flex;
+  gap: 30px;
+  padding: 60px 20px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
 }
-
 .page {
-  flex: none;
-  width: 100%;
-  height: 100%;
-  background: #fdf8f1;
-  box-shadow: 0 0 20px rgba(0,0,0,0.5);
-  scroll-snap-align: start;
+  scroll-snap-align: center;
+  background: #fff;
+  padding: 10px;
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+}
+canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* LOADING PAGE */
+.loading-page {
+  min-width: 300px;
+  height: 400px;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-canvas {
-  max-width: 100%;
-  max-height: 100%;
-}
-
-/* Footer */
-footer {
-  position: fixed;
-  bottom: 0;
-  width: 100%;
-  text-align: center;
+  background: #222;
   color: #aaa;
-  font-size: 12px;
-  padding: 8px;
-  background: rgba(0,0,0,0.6);
+  border-radius: 6px;
+  font-style: italic;
+}
+
+/* FOOTER */
+footer {
+  text-align: center;
+  padding: 30px 10px;
+  border-top: 1px solid #333;
+  font-size: 14px;
+}
+footer a {
+  color: #aaa;
+  margin: 0 10px;
+  text-decoration: none;
+}
+footer a:hover {
+  color: #fff;
 }
 </style>
 </head>
 
 <body>
 
-<div id="book-container">
-  <div id="book"></div>
+<!-- COVER -->
+<div id="cover-loader">
+  <img src="cover.png" alt="Dilpath Cover">
+  <p>Opening Dilpath…</p>
 </div>
 
-<footer>
-  © 2025 Dilpath — Neel Dhaygude |
-  <a href="https://instagram.com/YOUR_INSTAGRAM" style="color:#aaa">Instagram</a> |
-  <a href="https://youtube.com/YOUR_YOUTUBE" style="color:#aaa">YouTube</a>
-</footer>
+<!-- BOOK -->
+<div id="book"></div>
 
-<!-- PDF.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- FOOTER -->
+<footer>
+  © 2025 Poetic Shayri — All Rights Reserved<br><br>
+  <a href="https://www.instagram.com/poetic.shayri?igsh=MXE5eWRncHVvN2k3eA==" target="_blank">Instagram</a> |
+  <a href="https://youtube.com/@poeticshayri?si=6b4FsS3FB_EWjRr5" target="_blank">YouTube</a>
+</footer>
 
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -93,34 +124,78 @@ const pdfFiles = [
 ];
 
 const book = document.getElementById("book");
+const cover = document.getElementById("cover-loader");
 
-async function loadPDF(file) {
-  const pdf = await pdfjsLib.getDocument(file).promise;
+let queue = [];
+let loading = false;
+let loadingDiv = null;
 
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1.5 });
-
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
-
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-
-    await page.render({ canvasContext: context, viewport }).promise;
-
-    const pageDiv = document.createElement("div");
-    pageDiv.className = "page";
-    pageDiv.appendChild(canvas);
-
-    book.appendChild(pageDiv);
+async function prepareQueue() {
+  for (const file of pdfFiles) {
+    const pdf = await pdfjsLib.getDocument(file).promise;
+    for (let i = 1; i <= pdf.numPages; i++) {
+      queue.push({ file, page: i });
+    }
   }
 }
 
-(async () => {
-  for (const pdf of pdfFiles) {
-    await loadPDF(pdf);
+function showLoading() {
+  if (!loadingDiv) {
+    loadingDiv = document.createElement("div");
+    loadingDiv.className = "loading-page";
+    loadingDiv.innerText = "Loading next page…";
+    book.appendChild(loadingDiv);
   }
+}
+
+function hideLoading() {
+  if (loadingDiv) {
+    loadingDiv.remove();
+    loadingDiv = null;
+  }
+}
+
+async function loadNextPage() {
+  if (loading || queue.length === 0) return;
+  loading = true;
+  showLoading();
+
+  const { file, page } = queue.shift();
+  const pdf = await pdfjsLib.getDocument(file).promise;
+  const pdfPage = await pdf.getPage(page);
+  const viewport = pdfPage.getViewport({ scale: 1.2 });
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+
+  await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+
+  const pageDiv = document.createElement("div");
+  pageDiv.className = "page";
+  pageDiv.appendChild(canvas);
+
+  hideLoading();
+  book.appendChild(pageDiv);
+  loading = false;
+}
+
+book.addEventListener("scroll", () => {
+  if (book.scrollLeft + book.clientWidth >= book.scrollWidth - 600) {
+    loadNextPage();
+  }
+});
+
+(async () => {
+  await prepareQueue();
+
+  // Load first few pages
+  loadNextPage();
+  loadNextPage();
+  loadNextPage();
+
+  setTimeout(() => cover.classList.add("hidden"), 500);
 })();
 </script>
 
